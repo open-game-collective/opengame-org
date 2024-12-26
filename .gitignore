@@ -12,3 +12,6 @@ npm-debug.log*
 .wrangler/
 *storybook.log
 storybook-static/
+
+# For Cursor context
+references/

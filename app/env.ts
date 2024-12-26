@@ -1,7 +1,6 @@
 import type { ActorServer } from "actor-kit";
 import type { Remix } from "../server";
-// import type { GameServer } from "./game.server";
-// import type { SessionServer } from "./session.server";
+import type { UserServer } from "./user.server";
 
 declare module "@remix-run/cloudflare" {
   interface AppLoadContext {
@@ -14,12 +13,14 @@ declare module "@remix-run/cloudflare" {
 
 export interface Env {
   REMIX: DurableObjectNamespace<Remix>;
-  // SESSION: DurableObjectNamespace<SessionServer>;
-  // GAME: DurableObjectNamespace<GameServer>;
+  USER: DurableObjectNamespace<UserServer>;
   KV_STORAGE: KVNamespace;
   SESSION_JWT_SECRET: string;
   ACTOR_KIT_SECRET: string;
   ACTOR_KIT_HOST: string;
   NODE_ENV: string;
+  DISCORD_PUBLIC_KEY: string;
+  SENDGRID_API_KEY: string;
+  SEND_EMAIL: SendEmail;
   [key: string]: DurableObjectNamespace<ActorServer<any>> | unknown;
 }

@@ -1,14 +1,10 @@
 #:schema node_modules/wrangler/config-schema.json
-name = "opengame"
+name = "opengame-org"
 main = "dist/index.js"
-compatibility_flags = [ "nodejs_compat" ]
 compatibility_date = "2024-09-25"
+compatibility_flags = ["nodejs_compat"]
 
 assets = { directory = "./public" }
-
-kv_namespaces = [
-  { binding = "KV_STORAGE", id = "7ca58075ccd54315b82982f3c8d0e32d" }
-]
 
 [define]
 "process.env.REMIX_DEV_ORIGIN" = "'http://127.0.0.1:8002'"
@@ -16,14 +12,24 @@ kv_namespaces = [
 
 [vars]
 ACTOR_KIT_HOST = "opengame.org"
+DISCORD_PUBLIC_KEY = "your_discord_public_key_here"
 
 [[durable_objects.bindings]]
 name = "REMIX"
 class_name = "Remix"
 
+[[durable_objects.bindings]]
+name = "USER"
+class_name = "User"
+
+[[kv_namespaces]]
+binding = "KV_STORAGE"
+id = "1ee406ae8ebf4b50947e68fd76633452"
+preview_id = "bdf34d64eebc4555bdaf08b3c7273e95"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["Remix"]
+new_classes = ["Remix", "User"]
 
 [observability]
 enabled = true
