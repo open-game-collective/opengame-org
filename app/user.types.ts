@@ -6,10 +6,7 @@ import type {
 } from "actor-kit";
 import { z } from "zod";
 import { Env } from "./env";
-import {
-  UserInputPropsSchema,
-  UserServiceEventSchema,
-} from "./user.schemas";
+import { UserInputPropsSchema, UserServiceEventSchema } from "./user.schemas";
 
 export type UserClientEvent =
   | { type: "START_GAME"; gameId: string }
@@ -26,6 +23,7 @@ type UserPublicContext = {
 
 type UserPrivateContext = {
   keypair?: string;
+  email?: string;
 };
 
 export type UserServerContext = {

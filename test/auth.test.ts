@@ -6,44 +6,80 @@ import {
   handleEmailVerify,
   handleNewUser,
   handleRefreshToken,
+  handleOneTimeToken,
 } from "../app/auth";
 import type { Env } from "../app/env";
+import { createOneTimeToken, verifyOneTimeToken } from "../app/utils";
 
 // Mock dependencies
 vi.mock("actor-kit/server", () => ({
   createAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
 }));
 
-vi.mock("../app/utils", () => ({
-  createNewUserSession: vi
-    .fn()
-    .mockResolvedValue({
-      userId: "mock-user-id",
-      sessionId: "mock-session-id",
-      sessionToken: "mock-session-token",
-      refreshToken: "mock-refresh-token",
+vi.mock("../app/utils", async () => {
+  const actual = await vi.importActual("../app/utils");
+  return {
+    ...actual,
+    createNewUserSession: vi
+      .fn()
+      .mockResolvedValue({
+        userId: "mock-user-id",
+        sessionId: "mock-session-id",
+        sessionToken: "mock-session-token",
+        refreshToken: "mock-refresh-token",
+      }),
+    createRefreshToken: vi.fn().mockResolvedValue("mock-refresh-token"),
+    createSessionToken: vi.fn().mockResolvedValue("mock-session-token"),
+    createOneTimeToken: vi.fn().mockResolvedValue("mock-one-time-token"),
+    verifyRefreshToken: vi.fn().mockImplementation(async ({ token }) => {
+      if (token === "valid-refresh-token") {
+        return { userId: "mock-user-id" };
+      }
+      return null;
     }),
-  createRefreshToken: vi.fn().mockResolvedValue("mock-refresh-token"),
-  createSessionToken: vi.fn().mockResolvedValue("mock-session-token"),
-  verifyRefreshToken: vi.fn().mockImplementation(async ({ token }) => {
-    if (token === "valid-refresh-token") {
-      return { userId: "mock-user-id" };
-    }
-    return null;
-  }),
-  verifySessionToken: vi.fn().mockImplementation(async ({ token }) => {
-    if (token === "valid-session-token") {
-      return { userId: "mock-user-id", sessionId: "mock-session-id" };
-    }
-    return null;
-  }),
+    verifySessionToken: vi.fn().mockImplementation(async ({ token }) => {
+      if (token === "valid-session-token") {
+        return { userId: "mock-user-id", sessionId: "mock-session-id" };
+      }
+      return null;
+    }),
+    verifyOneTimeToken: vi.fn().mockImplementation(async ({ token, secret }) => {
+      if (token === "mock-one-time-token") {
+        return { userId: "mock-user-id" };
+      }
+      return null;
+    }),
+    generateVerificationCode: vi.fn().mockResolvedValue("123456"),
+    verifyCode: vi.fn().mockImplementation(async ({ email, code }) => {
+      return code === "123456";
+    }),
+    getUserIdByEmail: vi.fn().mockResolvedValue(null),
+    linkEmailToUser: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+// Add mock for sendVerificationCode
+vi.mock("../app/email", () => ({
+  sendVerificationCode: vi.fn().mockResolvedValue(true),
 }));
 
-// Mock Env
+// Update the mock Env section
+const mockUserDO = {
+  send: vi.fn().mockResolvedValue(undefined),
+  spawn: vi.fn().mockResolvedValue(undefined),
+};
+
+const mockUserNamespace = {
+  idFromName: vi.fn().mockReturnValue({ toString: () => "mock-id" }),
+  get: vi.fn().mockReturnValue(mockUserDO),
+};
+
 const mockEnv = {
   SESSION_JWT_SECRET: "mock-session-secret",
   ACTOR_KIT_SECRET: "mock-actor-kit-secret",
-} as Env;
+  KV_STORAGE: {} as KVNamespace,
+  USER: mockUserNamespace,
+} as unknown as Env;
 
 describe("Auth Handlers", () => {
   describe("handleNewUser", () => {
@@ -62,6 +98,18 @@ describe("Auth Handlers", () => {
         sessionToken: "mock-session-token",
         refreshToken: "mock-refresh-token",
       });
+
+      // Verify the USER DO was called correctly
+      expect(mockUserNamespace.idFromName).toHaveBeenCalledWith("mock-user-id");
+      expect(mockUserDO.spawn).toHaveBeenCalledWith({
+        actorType: "user",
+        actorId: "mock-user-id",
+        caller: {
+          type: "client",
+          id: "mock-user-id",
+        },
+        input: {},
+      });
     });
   });
 
@@ -69,8 +117,13 @@ describe("Auth Handlers", () => {
     it("should validate email and return success response", async () => {
       const request = new Request("https://example.com/auth/email/code", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "test@example.com" }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer valid-session-token",
+        },
+        body: JSON.stringify({
+          email: "test@example.com",
+        }),
       });
 
       const response = await handleEmailCode(request, mockEnv);
@@ -103,7 +156,10 @@ describe("Auth Handlers", () => {
     it("should verify code and return new session", async () => {
       const request = new Request("https://example.com/auth/email/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer valid-session-token",
+        },
         body: JSON.stringify({
           email: "test@example.com",
           code: "123456",
@@ -115,9 +171,14 @@ describe("Auth Handlers", () => {
 
       expect(response.status).toBe(200);
       expect(data).toEqual({
-        userId: "mock-user-id",
-        accessToken: "mock-session-token",
-        refreshToken: "mock-refresh-token",
+        success: true,
+      });
+
+      // Verify the USER DO was called correctly
+      expect(mockUserNamespace.idFromName).toHaveBeenCalledWith("mock-user-id");
+      expect(mockUserDO.send).toHaveBeenCalledWith({
+        type: "VERIFY_EMAIL",
+        email: "test@example.com",
       });
     });
 
@@ -299,6 +360,71 @@ describe("Auth Handlers", () => {
       expect(response.status).toBe(200);
       expect(data).toEqual({
         accessToken: "mock-access-token",
+      });
+    });
+  });
+
+  describe("handleOneTimeToken", () => {
+    it("should generate a one-time token for authenticated user", async () => {
+      const request = new Request("https://example.com/auth/one-time-token", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer valid-session-token",
+        },
+      });
+
+      const response = await handleOneTimeToken(request, mockEnv);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty("token");
+      expect(typeof data.token).toBe("string");
+    });
+
+    it("should return 401 when no authorization header is present", async () => {
+      const request = new Request("https://example.com/auth/one-time-token", {
+        method: "POST",
+      });
+
+      const response = await handleOneTimeToken(request, mockEnv);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toBe("Missing authorization header");
+    });
+
+    it("should return 401 when session token is invalid", async () => {
+      const request = new Request("https://example.com/auth/one-time-token", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer invalid-session-token",
+        },
+      });
+
+      const response = await handleOneTimeToken(request, mockEnv);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toBe("Invalid session token");
+    });
+
+    it("should generate token containing user ID from session", async () => {
+      const request = new Request("https://example.com/auth/one-time-token", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer valid-session-token",
+        },
+      });
+
+      const response = await handleOneTimeToken(request, mockEnv);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.token).toBe("mock-one-time-token");
+
+      expect(createOneTimeToken).toHaveBeenCalledWith({
+        userId: "mock-user-id",
+        secret: mockEnv.SESSION_JWT_SECRET,
       });
     });
   });

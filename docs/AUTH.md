@@ -266,6 +266,62 @@ Generates actor-specific access tokens for Actor Kit.
   }
   ```
 
+### `/auth/one-time-token`
+Generates a one-time token for cross-site authentication.
+- Method: POST
+- Requires valid session token
+- Returns a short-lived JWT token containing the user ID
+- Token expires in 30 seconds
+- Example:
+  ```http
+  POST /auth/one-time-token
+  Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+  ```
+  Response:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIs..."
+  }
+  ```
+
+## Cross-Site Authentication Flow
+
+1. Site A requests a one-time token:
+```typescript
+const response = await fetch('https://site-a.com/auth/one-time-token', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${currentSessionToken}`
+  }
+});
+const { token } = await response.json();
+```
+
+2. Site A sends the token to Site B (via URL parameter, postMessage, etc.)
+
+3. Site B verifies the token:
+```typescript
+import { jwtVerify } from "jose";
+
+async function verifyOneTimeToken(token: string) {
+  try {
+    const verified = await jwtVerify(
+      token, 
+      new TextEncoder().encode(process.env.JWT_SECRET)
+    );
+    
+    // Check token audience and expiry
+    if (verified.payload.aud !== "ONE_TIME") {
+      throw new Error("Invalid token type");
+    }
+    
+    return verified.payload.userId as string;
+  } catch {
+    throw new Error("Invalid or expired token");
+  }
+}
+```
+
 ## Complete Example Flow
 
 Here's a complete example of a user journey from anonymous to verified:

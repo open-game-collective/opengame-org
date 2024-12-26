@@ -14,7 +14,8 @@ export const UserClientEventSchema = z.discriminatedUnion("type", [
 
 export const UserServiceEventSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("SYNC"),
+    type: z.literal("VERIFY_EMAIL"),
+    email: z.string(),
   }),
 ]);
 

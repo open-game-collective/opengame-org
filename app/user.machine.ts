@@ -1,5 +1,6 @@
 import type { ActorKitStateMachine } from "actor-kit";
-import { setup } from "xstate";
+import { produce } from "immer";
+import { assign, setup } from "xstate";
 import type { UserEvent, UserInput, UserServerContext } from "./user.types";
 
 export const userMachine = setup({
@@ -8,7 +9,16 @@ export const userMachine = setup({
     events: {} as UserEvent,
     input: {} as UserInput,
   },
-  actions: {},
+  actions: {
+    setEmail: assign({
+      private: ({ context, event }) =>
+        produce(context.private, (draft) => {
+          if (event.type === "VERIFY_EMAIL") {
+            draft[event.caller.id].email = event.email;
+          }
+        }),
+    }),
+  },
   guards: {},
 }).createMachine({
   id: "user",
@@ -27,6 +37,20 @@ export const userMachine = setup({
     Initialization: {
       initial: "Ready",
       states: {
+        EmailVerification: {
+          initial: "Incomplete",
+          states: {
+            Incomplete: {
+              on: {
+                VERIFY_EMAIL: {
+                  target: "Complete",
+                  actions: ["setEmail"],
+                },
+              },
+            },
+            Complete: {},
+          },
+        },
         Ready: {},
       },
     },

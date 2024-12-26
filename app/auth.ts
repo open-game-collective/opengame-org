@@ -1,10 +1,16 @@
+import { ActorServer } from "actor-kit";
 import { createAccessToken } from "actor-kit/server";
 import { z } from "zod";
-import { REFRESH_TOKEN_COOKIE_KEY, SESSION_TOKEN_COOKIE_KEY } from "./constants";
+import {
+  REFRESH_TOKEN_COOKIE_KEY,
+  SESSION_TOKEN_COOKIE_KEY,
+} from "./constants";
 import { sendVerificationCode } from "./email";
 import { Env } from "./env";
+import { UserMachine } from "./user.machine";
 import {
   createNewUserSession,
+  createOneTimeToken,
   createRefreshToken,
   createSessionToken,
   generateVerificationCode,
@@ -39,6 +45,18 @@ export async function handleNewUser(request: Request, env: Env) {
     await createNewUserSession({
       secret: env.SESSION_JWT_SECRET,
     });
+
+  const id = env.USER.idFromName(userId);
+  const USER = env.USER as DurableObjectNamespace<ActorServer<UserMachine>>;
+  await USER.get(id).spawn({
+    actorType: "user",
+    actorId: userId,
+    caller: {
+      type: "client",
+      id: userId,
+    },
+    input: {},
+  });
 
   return new Response(
     JSON.stringify({
@@ -186,6 +204,18 @@ export async function handleEmailVerify(request: Request, env: Env) {
   // Link email to user
   await linkEmailToUser(result.data.email, session.userId, env.KV_STORAGE);
 
+  // Here we send an event to the actor kit
+  // In future if we pull this file out into an auth package, we can have this be
+  // part of a set of hooks/callbacks when configuring via createAuthKitRouter
+  // so that we don't need to couple access to the UserMachine here
+  const id = env.USER.idFromName(session.userId);
+  const USER = env.USER as DurableObjectNamespace<ActorServer<UserMachine>>;
+
+  await USER.get(id).send({
+    type: "VERIFY_EMAIL",
+    email: result.data.email,
+  });
+
   return new Response(JSON.stringify({ success: true }), { status: 200 });
 }
 
@@ -237,7 +267,7 @@ export async function handleRefreshToken(request: Request, env: Env) {
 export async function handleLogout(request: Request, env: Env) {
   const headers = new Headers();
   headers.set("Location", "/");
-  
+
   headers.append(
     "Set-Cookie",
     `${SESSION_TOKEN_COOKIE_KEY}=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
@@ -249,7 +279,7 @@ export async function handleLogout(request: Request, env: Env) {
 
   return new Response(null, {
     status: 302,
-    headers
+    headers,
   });
 }
 
@@ -302,4 +332,46 @@ export async function handleActorToken(request: Request, env: Env) {
   });
 
   return new Response(JSON.stringify({ accessToken }), { status: 200 });
+}
+
+export async function handleOneTimeToken(request: Request, env: Env) {
+  // Get the user's ID from their session token
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(
+      JSON.stringify({ error: "Missing authorization header" }),
+      { status: 401 }
+    );
+  }
+
+  const sessionToken = authHeader.slice(7);
+  const session = await verifySessionToken({
+    token: sessionToken,
+    secret: env.SESSION_JWT_SECRET,
+  });
+
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Invalid session token" }), {
+      status: 401,
+    });
+  }
+
+  // Generate a one-time token
+  const oneTimeToken = await createOneTimeToken({
+    userId: session.userId,
+    secret: env.SESSION_JWT_SECRET,
+  });
+
+  // Return just the token
+  return new Response(
+    JSON.stringify({
+      token: oneTimeToken,
+    }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
 }

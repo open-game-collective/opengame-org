@@ -13,6 +13,7 @@ import {
   handleLogout,
   handleNewUser,
   handleRefreshToken,
+  handleOneTimeToken,
 } from "./app/auth";
 import type { Env } from "./app/env";
 
@@ -62,6 +63,8 @@ export const createAuthRouter = () => {
           return handleActorToken(request, env);
         case "logout":
           return handleLogout(request, env);
+        case "one-time-token":
+          return handleOneTimeToken(request, env);
         default:
           return new Response(JSON.stringify({ error: "Not found" }), {
             status: 404,

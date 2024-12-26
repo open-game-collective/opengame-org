@@ -29,6 +29,20 @@ export async function createSessionToken({
     .sign(new TextEncoder().encode(secret));
 }
 
+export async function createOneTimeToken({
+  userId,
+  secret,
+}: {
+  userId: string;
+  secret: string;
+}) {
+  return await new SignJWT({ userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("30s")
+    .setAudience("ONE_TIME")
+    .sign(new TextEncoder().encode(secret));
+}
+
 export async function createRefreshToken({
   userId,
   secret,
@@ -147,4 +161,24 @@ export async function getEmailByUserId(userId: string, kv: KVNamespace) {
   }
   
   return null;
+}
+
+export async function verifyOneTimeToken({
+  token,
+  secret,
+}: {
+  token: string;
+  secret: string;
+}) {
+  try {
+    const verified = await jwtVerify(token, new TextEncoder().encode(secret));
+    invariant(verified.payload.userId, "Missing userId in token payload");
+    invariant(
+      verified.payload.aud === "ONE_TIME",
+      "Invalid audience for one-time token"
+    );
+    return verified.payload as { userId: string };
+  } catch {
+    return null;
+  }
 }
