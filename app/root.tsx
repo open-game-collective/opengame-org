@@ -15,12 +15,17 @@ import { createAccessToken, createActorFetch } from "actor-kit/server";
 import { Navigation } from "./components/Navigation";
 import type { UserMachine } from "./user.machine";
 
-import { useState } from "react";
+import { createProviderAuthClient } from "@open-game-collective/auth-kit/provider/client";
+import { createProviderAuthContext } from "@open-game-collective/auth-kit/provider/react";
+import { useMemo, useState } from "react";
 import styles from "./styles.css";
 import { UserProvider } from "./user.context";
 
 // Update the UserSnapshot type to match the machine's structure
 type UserSnapshot = CallerSnapshotFrom<UserMachine>;
+
+// Create the provider auth context
+export const ProviderAuthContext = createProviderAuthContext();
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: styles },
@@ -70,48 +75,61 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { userId, payload, accessToken, host } = useLoaderData<typeof loader>();
 
+  // Create the provider auth client with the required tokens
+  const providerClient = useMemo(
+    () =>
+      createProviderAuthClient({
+        host: "localhost:8787", // Update this for production
+        userId,
+        sessionToken: accessToken,
+      }),
+    [userId, accessToken]
+  );
+
   return (
-    <html lang="en" className="h-full">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <Meta />
-        <Links />
-      </head>
-      <UserProvider
-        actorId={userId}
-        accessToken={accessToken}
-        host={host}
-        checksum={payload.checksum}
-        initialSnapshot={payload.snapshot}
-      >
-        <body className="h-full bg-gray-50 dark:bg-gray-900">
-          <div className="min-h-full">
-            <Navigation
-              userEmail="user@example.com"
-              isOpen={isMobileMenuOpen}
-              onOpenChange={setIsMobileMenuOpen}
-            />
-            <div
-              className={`
-            lg:pl-64
-            flex flex-col min-h-full
-            transition-transform duration-300 ease-in-out
-            ${
-              isMobileMenuOpen
-                ? "translate-x-64 lg:translate-x-0"
-                : "translate-x-0"
-            }
-          `}
-            >
-              <Outlet />
+    <ProviderAuthContext.Provider client={providerClient}>
+      <html lang="en" className="h-full">
+        <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width,initial-scale=1" />
+          <Meta />
+          <Links />
+        </head>
+        <UserProvider
+          actorId={userId}
+          accessToken={accessToken}
+          host={host}
+          checksum={payload.checksum}
+          initialSnapshot={payload.snapshot}
+        >
+          <body className="h-full bg-gray-50 dark:bg-gray-900">
+            <div className="min-h-full">
+              <Navigation
+                userEmail="user@example.com"
+                isOpen={isMobileMenuOpen}
+                onOpenChange={setIsMobileMenuOpen}
+              />
+              <div
+                className={`
+              lg:pl-64
+              flex flex-col min-h-full
+              transition-transform duration-300 ease-in-out
+              ${
+                isMobileMenuOpen
+                  ? "translate-x-64 lg:translate-x-0"
+                  : "translate-x-0"
+              }
+            `}
+              >
+                <Outlet />
+              </div>
             </div>
-          </div>
-          <ScrollRestoration />
-          <Scripts />
-          <LiveReload />
-        </body>
-      </UserProvider>
-    </html>
+            <ScrollRestoration />
+            <Scripts />
+            <LiveReload />
+          </body>
+        </UserProvider>
+      </html>
+    </ProviderAuthContext.Provider>
   );
 }

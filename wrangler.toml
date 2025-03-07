@@ -13,6 +13,7 @@ assets = { directory = "./public" }
 [vars]
 ACTOR_KIT_HOST = "opengame.org"
 DISCORD_PUBLIC_KEY = "your_discord_public_key_here"
+AUTH_SECRET = "your_auth_secret_here" # Change this in production
 
 [[durable_objects.bindings]]
 name = "REMIX"

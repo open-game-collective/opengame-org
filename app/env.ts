@@ -7,7 +7,8 @@ declare module "@remix-run/cloudflare" {
     env: Env;
     userId: string;
     sessionId: string;
-    pageSessionId: string;
+    sessionToken: string;
+    requestId: string;
   }
 }
 
@@ -22,5 +23,10 @@ export interface Env {
   DISCORD_PUBLIC_KEY: string;
   SENDGRID_API_KEY: string;
   SEND_EMAIL: SendEmail;
+  AUTH_SECRET: string;
+  
+  // New fields for account linking
+  GAME_NAMES: Record<string, string>; // For mapping game IDs to names
+  
   [key: string]: DurableObjectNamespace<ActorServer<any>> | unknown;
 }
