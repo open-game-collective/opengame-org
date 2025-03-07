@@ -14,7 +14,7 @@
     "resolveJsonModule": true,
     "target": "ESNext",
     "strict": true,
-    "allowJs": true,
+    "allowJs": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
@@ -23,6 +23,6 @@
     },
     "noEmit": true
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx"],
+  "include": ["app/**/*.ts", "app/**/*.tsx", "app/types/**/*.d.ts"],
   "exclude": ["node_modules", "**/*.stories.tsx", "**/*.stories.ts"]
 }
